@@ -19,5 +19,8 @@ dependencies = [
 [project.optional-dependencies]
 dev = ["pytest", "pytest-asyncio", "httpx"]
 
+[project.scripts]
+server = "server.app:main"
+
 [tool.hatch.build.targets.wheel]
 packages = ["."]
