@@ -23,7 +23,7 @@ from client import PromptOptimizerEnv
 from models import PromptOptimizerAction
 
 # ── Configuration ──────────────────────────────────────────────────────────────
-IMAGE_NAME   = os.getenv("LOCAL_IMAGE_NAME")
+IMAGE_NAME   = os.getenv("IMAGE_NAME") or os.getenv("LOCAL_IMAGE_NAME")
 API_KEY      = os.getenv("HF_TOKEN") or os.getenv("API_KEY")
 API_BASE_URL = os.getenv("API_BASE_URL") or "https://router.huggingface.co/v1"
 MODEL_NAME   = os.getenv("MODEL_NAME") or "Qwen/Qwen2.5-72B-Instruct"
@@ -148,11 +148,7 @@ def get_agent_action(client: OpenAI, obs_dict: dict) -> str:
 async def main() -> None:
     client = OpenAI(base_url=API_BASE_URL, api_key=API_KEY)
 
-    if IMAGE_NAME:
-        env = await PromptOptimizerEnv.from_docker_image(IMAGE_NAME)
-    else:
-        base_url = os.getenv("ENV_BASE_URL", "http://localhost:8000")
-        env = PromptOptimizerEnv(base_url=base_url)
+    env = await PromptOptimizerEnv.from_docker_image(IMAGE_NAME)
 
     rewards: List[float] = []
     steps_taken = 0
