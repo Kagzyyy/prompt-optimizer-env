@@ -23,7 +23,7 @@ from client import PromptOptimizerEnv
 from models import PromptOptimizerAction
 
 # ── Configuration ──────────────────────────────────────────────────────────────
-IMAGE_NAME   = os.getenv("IMAGE_NAME") or os.getenv("LOCAL_IMAGE_NAME")
+ENV_BASE_URL = os.getenv("ENV_BASE_URL", "https://kagzy-prompt-optimizer-env.hf.space")
 API_KEY      = os.getenv("HF_TOKEN") or os.getenv("API_KEY")
 API_BASE_URL = os.getenv("API_BASE_URL") or "https://router.huggingface.co/v1"
 MODEL_NAME   = os.getenv("MODEL_NAME") or "Qwen/Qwen2.5-72B-Instruct"
@@ -156,7 +156,7 @@ async def main() -> None:
     log_start(task=TASK_NAME, env=BENCHMARK, model=MODEL_NAME)
 
     try:
-        env = await PromptOptimizerEnv.from_docker_image(IMAGE_NAME)
+        env = PromptOptimizerEnv(base_url=ENV_BASE_URL)
 
         async with env:
             result = await env.reset()
