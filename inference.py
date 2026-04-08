@@ -27,9 +27,10 @@ ENV_BASE_URL = os.getenv("ENV_BASE_URL", "https://kagzy-prompt-optimizer-env.hf.
 API_KEY      = os.getenv("API_KEY") or os.getenv("HF_TOKEN")
 API_BASE_URL = os.getenv("API_BASE_URL") or "https://router.huggingface.co/v1"
 MODEL_NAME   = os.getenv("MODEL_NAME") or "Qwen/Qwen2.5-72B-Instruct"
-TASK_NAME    = os.getenv("PROMPT_OPT_TASK", "json_user_profile")
 BENCHMARK    = "prompt_optimizer"
 MAX_STEPS    = 8
+# Run all 7 tasks (seeds 0-6 map to each task in TASK_BANK)
+TASK_SEEDS   = list(range(7))
 TEMPERATURE  = 0.7
 MAX_TOKENS   = 800
 
@@ -145,66 +146,59 @@ def get_agent_action(client: OpenAI, obs_dict: dict) -> str:
         return "You are a helpful assistant. Please follow the task specification carefully."
 
 
-async def main() -> None:
-    client = OpenAI(base_url=API_BASE_URL, api_key=API_KEY)
-
+async def run_task(env: PromptOptimizerEnv, client: OpenAI, seed: int) -> None:
+    """Run one full episode for the task selected by seed."""
     rewards: List[float] = []
     steps_taken = 0
-    score = 0.0
+    score = 0.01
     success = False
 
-    log_start(task=TASK_NAME, env=BENCHMARK, model=MODEL_NAME)
-
     try:
-        env = PromptOptimizerEnv(base_url=ENV_BASE_URL)
+        result = await env.reset(seed=seed)
+        obs = result.observation
 
-        async with env:
-            result = await env.reset()
+        task_name = obs.target_spec_type  # e.g. "json_keys", "code_tests", etc.
+        log_start(task=task_name, env=BENCHMARK, model=MODEL_NAME)
+
+        log_step(step=0, action=obs.current_prompt, reward=obs.step_reward, done=obs.done, error=None)
+        rewards.append(obs.step_reward)
+
+        for step in range(1, MAX_STEPS + 1):
+            if obs.done:
+                break
+
+            obs_dict = obs.model_dump() if hasattr(obs, "model_dump") else obs.__dict__
+            new_prompt = get_agent_action(client, obs_dict)
+
+            result = await env.step(PromptOptimizerAction(rewritten_prompt=new_prompt))
             obs = result.observation
-
-            log_step(
-                step=0,
-                action=obs.current_prompt,
-                reward=obs.step_reward,
-                done=obs.done,
-                error=None,
-            )
             rewards.append(obs.step_reward)
+            steps_taken = step
 
-            for step in range(1, MAX_STEPS + 1):
-                if obs.done:
-                    break
+            log_step(step=step, action=new_prompt, reward=obs.step_reward, done=obs.done, error=None)
 
-                obs_dict = obs.model_dump() if hasattr(obs, "model_dump") else obs.__dict__
+            if obs.done:
+                success = obs.success
+                break
 
-                new_prompt = get_agent_action(client, obs_dict)
-
-                result = await env.step(PromptOptimizerAction(rewritten_prompt=new_prompt))
-                obs = result.observation
-
-                rewards.append(obs.step_reward)
-                steps_taken = step
-
-                log_step(
-                    step=step,
-                    action=new_prompt,
-                    reward=obs.step_reward,
-                    done=obs.done,
-                    error=None,
-                )
-
-                if obs.done:
-                    success = obs.success
-                    break
-
-        score = max(rewards) if rewards else 0.0
-        score = min(max(score, 0.0), 1.0)
-        success = score >= 1.0
+        score = max(rewards) if rewards else 0.01
+        # Scores must be strictly between 0 and 1 (not 0.0, not 1.0)
+        score = min(max(score, 0.01), 0.99)
+        success = score >= 0.5
 
     except Exception as e:
-        print(f"[DEBUG] Episode error: {e}", flush=True)
+        print(f"[DEBUG] Task {seed} error: {e}", flush=True)
+        score = 0.01
     finally:
-        log_end(success=success, steps=steps_taken, score=score, rewards=rewards)
+        log_end(success=success, steps=steps_taken, score=score, rewards=rewards if rewards else [0.01])
+
+
+async def main() -> None:
+    client = OpenAI(base_url=API_BASE_URL, api_key=API_KEY)
+    env = PromptOptimizerEnv(base_url=ENV_BASE_URL)
+
+    for seed in TASK_SEEDS:
+        await run_task(env, client, seed)
 
 
 if __name__ == "__main__":
