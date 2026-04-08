@@ -148,8 +148,6 @@ def get_agent_action(client: OpenAI, obs_dict: dict) -> str:
 async def main() -> None:
     client = OpenAI(base_url=API_BASE_URL, api_key=API_KEY)
 
-    env = await PromptOptimizerEnv.from_docker_image(IMAGE_NAME)
-
     rewards: List[float] = []
     steps_taken = 0
     score = 0.0
@@ -158,6 +156,8 @@ async def main() -> None:
     log_start(task=TASK_NAME, env=BENCHMARK, model=MODEL_NAME)
 
     try:
+        env = await PromptOptimizerEnv.from_docker_image(IMAGE_NAME)
+
         async with env:
             result = await env.reset()
             obs = result.observation
